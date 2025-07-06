@@ -3,6 +3,8 @@ import base64
 import numpy as np
 from PIL import Image as PILImage
 import requests
+import os 
+
 
 def np2pil(arr):
     """將 numpy 陣列轉為 PIL Image"""
@@ -11,14 +13,29 @@ def np2pil(arr):
     return PILImage.fromarray(arr)
 
 def imwrite(file, arr, fmt=None):
-    """將圖像儲存為檔案（自動推斷格式）"""
+    """
+    將圖像儲存為檔案，支援自動建立目錄。
+
+    Args:
+        file (str or file-like): 檔案路徑或開啟的檔案物件。
+        arr (np.ndarray): 要儲存的圖像資料。
+        fmt (str): 選填，指定格式（預設從副檔名自動推斷）。
+    """
     arr = np.asarray(arr)
+
     if isinstance(file, str):
+        # 自動建立目錄
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+
+        # 推斷格式
         fmt = file.rsplit('.', 1)[-1].lower()
         if fmt == 'jpg':
             fmt = 'jpeg'
-        file = open(file, 'wb')
-    np2pil(arr).save(file, fmt, quality=95)
+        with open(file, 'wb') as f:
+            np2pil(arr).save(f, fmt, quality=95)
+    else:
+        # 若 file 是 file-like object
+        np2pil(arr).save(file, fmt or 'jpeg', quality=95)
 
 def imencode(arr, fmt='jpeg'):
     """將圖像編碼為 bytes，用於 base64 或網頁輸出"""

@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pylab as pl
-from core_utils.image_utils import imshow, tile2d
-from core_utils.io_utils import  imwrite
-from core_utils.tf_ops import to_rgb
+from core_utils.utils_image import imshow, tile2d
+from core_utils.utils_io import  imwrite
+from core_utils.ops_tensor import to_rgb
 
 def viz_pool(pool, step_i):
     """

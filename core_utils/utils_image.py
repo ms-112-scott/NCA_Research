@@ -1,7 +1,7 @@
 import numpy as np
 from IPython.display import Image, display
 
-from .io_utils import imencode
+from .utils_io import imencode
 
 def imshow(arr, fmt='jpeg'):
     """在 notebook 中顯示圖像（支援 jpeg/png）"""
