@@ -2,7 +2,8 @@ import numpy as np
 import matplotlib.pylab as plt
 from core_utils.utils_image import imshow, tile2d
 from core_utils.utils_io import  imwrite
-from core_utils.ops_tensor import to_rgb
+from core_utils.ops_tf_np import to_rgb
+import os
 
 def viz_pool(pool, step_i, output_path='train_log'):
     """
@@ -18,13 +19,14 @@ def viz_pool(pool, step_i, output_path='train_log'):
     tiled_pool[-72:, :] += (-tiled_pool[-72:, :] + ones[:, None, None]) * fade[::-1, None, None]
     imwrite(f'{output_path}/{step_i:04d}_pool.jpg', tiled_pool)
 
-def viz_batch(x0, x, step_i, output_path='train_log'):
+def viz_batch(batch_list, step_i, output_path='train_log'):
     """
     將訓練批次前後狀態左右合併、上下堆疊後輸出並顯示
     """
-    vis0 = np.hstack(to_rgb(x0).numpy())
-    vis1 = np.hstack(to_rgb(x).numpy())
-    vis = np.vstack([vis0, vis1])
+    lists = []
+    for i in range(len(batch_list)):
+        lists.append(np.hstack(batch_list[i][...,:3]))
+    vis = np.vstack(lists)
     imwrite(f'{output_path}/batches_{step_i:04d}.jpg', vis)
     print('batch (before/after):')
     imshow(vis)
@@ -67,7 +69,7 @@ def viz_loss(loss_log, log_scale=True, window=50, save_path=None):
 
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=150)
+        plt.savefig(save_path+"/loss.png", dpi=150)
         print(f"[✔] Loss curve saved to: {save_path}")
 
     plt.show()

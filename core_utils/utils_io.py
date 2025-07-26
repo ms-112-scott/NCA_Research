@@ -79,3 +79,13 @@ def load_emoji(emoji_char, max_size=128):
     code = hex(ord(emoji_char))[2:].lower()
     url = f'https://github.com/googlefonts/noto-emoji/blob/main/png/128/emoji_u{code}.png?raw=true'
     return load_image(url, max_size=max_size)
+
+def load_cfd_npy(filepath):
+    """
+    讀取 CFD .npy 檔並回傳 5D 資料陣列。
+    
+    Returns:
+        np.ndarray: shape = (T, Z, Y, X, C)
+    """
+    data = np.load(filepath)
+    return data

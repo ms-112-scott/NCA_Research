@@ -4,8 +4,10 @@ plt.rcParams['axes.unicode_minus'] = False            # 避免負號顯示錯誤
 
 import numpy as np
 import tensorflow as tf
-
-
+import math
+##---------------------------------------------------------------------------------------------------------------------------
+##---------------------------------------------------------------------------------------------------------------------------
+#region plt_split_channels
 def plt_split_channels(image, histogram=False, max_channels=None):
     """
     顯示多通道影像的每個通道分圖，並可選擇是否繪製直方圖。
@@ -70,3 +72,111 @@ def plt_split_channels(image, histogram=False, max_channels=None):
 
     plt.tight_layout()
     plt.show()
+
+##---------------------------------------------------------------------------------------------------------------------------
+##---------------------------------------------------------------------------------------------------------------------------
+#region plt_CFD_channels
+def plt_CFD_channels(tensor, cols=6, histogram=False, channel_max=18, title=None, figsize=2):
+    default_title = [
+        "X 方向速度", "Y 方向速度", "Z 方向速度", "流速大小", "壓力 p", "湍流動能 k", "渦動黏滯係數 νₜ", "湍流能耗率 ε",
+        "X 標準化座標", "Y 標準化座標", "Z 標準化座標", "遮罩",
+    ]
+
+    # Tensor shape: (H, W, C)
+    h, w, c = tensor.shape
+    c = min(c, channel_max)
+    rows_per_group = 2 if histogram else 1
+    groups = (c + cols - 1) // cols  # ceil division
+
+    total_rows = 1 + groups * rows_per_group
+    fig, axes = plt.subplots(total_rows, cols, figsize=(cols * figsize, total_rows * figsize))
+
+    if total_rows == 1:
+        axes = np.expand_dims(axes, 0)
+
+    # Original image (first row, first column)
+    for ax in axes[0]:
+        ax.axis('off')
+    axes[0][0].imshow(tensor[..., :3])
+    axes[0][0].set_title("Uxyz embed CFD img", fontsize=8)
+
+    # Channel plots and histograms
+    for i in range(c):
+        group_idx = i // cols
+        col_idx = i % cols
+
+        if title is None:
+            if i >= len(default_title):
+                plt_title = f"hidden Ch {i - len(default_title)}"
+            else:
+                plt_title = default_title[i]
+        else:
+            if i >= len(title):
+                plt_title = f"hidden Ch {i - len(title)}"
+            else:
+                plt_title = title[i]
+
+        row_img = 1 + group_idx * rows_per_group
+        ax_img = axes[row_img][col_idx]
+
+        # 取得該 channel 最小最大值做顏色刻度
+        # 若 tensor 是 tf.Tensor，先轉 numpy
+        channel_data = tensor[..., i]
+        if isinstance(channel_data, tf.Tensor):
+            channel_data = channel_data.numpy()
+        vmin = np.min(channel_data)
+        vmax = np.max(channel_data)
+
+        ax_img.imshow(channel_data, cmap='jet', vmin=vmin, vmax=vmax)
+        ax_img.set_title(plt_title, fontsize=figsize*3)
+        ax_img.axis('off')
+
+        if histogram:
+            row_hist = row_img + 1
+            ax_hist = axes[row_hist][col_idx]
+            ax_hist.hist(channel_data.ravel(), bins=50, color='gray')
+            ax_hist.set_title(f"Hist {i}", fontsize=figsize*3)
+            ax_hist.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+##---------------------------------------------------------------------------------------------------------------------------
+##---------------------------------------------------------------------------------------------------------------------------
+#region plt_random_cfd_slice
+def plt_random_cfd_slice(data, show_info=True):
+    """
+    顯示隨機 timestep、Z 切片、channel 的 CFD 2D heatmap。
+    
+    Args:
+        data (np.ndarray): CFD 資料 (T, Z, Y, X, C)
+        show_info (bool): 是否輸出索引與欄位資訊
+    """
+    T, Z, Y, X, C = data.shape
+
+    # 隨機選擇維度索引
+    t = random.randint(0, T - 1)
+    z = random.randint(0, Z - 1)
+    c = random.randint(0, C - 1)
+
+    # 對應欄位名稱
+    columns = ["X", "Y", "Z", "Xnorm", "Ynorm", "Znorm", "Ux", "Uy", "Uz", "Umag", "p", "k"]
+    channel_name = columns[c] if c < len(columns) else f"Channel {c}"
+
+    # 擷取切片資料
+    slice_2d = data[t, z, :, :, c]
+
+    # 繪製圖像
+    plt.figure(figsize=(8, 6))
+    im = plt.imshow(slice_2d, cmap='viridis', origin='lower', aspect='auto')
+    plt.colorbar(im, label=channel_name)
+    plt.title(f"Timestep: {t}, Z-slice: {z}, Channel: {channel_name} (Index {c})")
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.tight_layout()
+    plt.show()
+
+    if show_info:
+        print(f"[Info] Data shape: {data.shape}")
+        print(f"→ Timestep index = {t}")
+        print(f"→ Z index        = {z}")
+        print(f"→ Channel index  = {c} ({channel_name})")
