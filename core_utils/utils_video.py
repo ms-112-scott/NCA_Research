@@ -1,11 +1,6 @@
 import os
 import numpy as np
-
-# 設定 moviepy 使用本地 ffmpeg
-os.environ['FFMPEG_BINARY'] = 'ffmpeg'
-
-from moviepy.editor import ImageSequenceClip
-from moviepy.video.io.ffmpeg_writer import FFMPEG_VideoWriter
+import cv2
 
 def save_video(image_sequence, out_path, fps=15):
     """
@@ -16,13 +11,36 @@ def save_video(image_sequence, out_path, fps=15):
         out_path: 輸出檔案路徑（建議使用 .mp4）
         fps: 幀率（預設 15）
     """
-    clip = ImageSequenceClip(image_sequence, fps=fps)
-    clip.write_videofile(out_path, codec='libx264')
+    if len(image_sequence) == 0:
+        raise ValueError("image_sequence is empty")
 
+    first_frame = image_sequence[0]
+    if len(first_frame.shape) == 2:  # 灰階轉三通道
+        height, width = first_frame.shape
+        is_color = False
+    else:
+        height, width, _ = first_frame.shape
+        is_color = True
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter(out_path, fourcc, fps, (width, height), isColor=is_color)
+
+    for img in image_sequence:
+        img = np.asarray(img)
+        if img.dtype in [np.float32, np.float64]:
+            img = np.clip(img, 0, 1)
+            img = (img * 255).astype(np.uint8)
+        if len(img.shape) == 2 and is_color:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        elif len(img.shape) == 3 and not is_color:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        writer.write(img)
+
+    writer.release()
 
 class VideoWriter:
     """
-    可連續寫入幀畫面的影片儲存器（低階介面，支援 context manager）
+    低階介面影片寫入器（支援 context manager）
 
     Usage:
     ```python
@@ -32,31 +50,39 @@ class VideoWriter:
     ```
     """
 
-    def __init__(self, filename, fps=30.0, **kwargs):
+    def __init__(self, filename, fps=30.0):
+        self.filename = filename
+        self.fps = fps
         self.writer = None
-        self.params = dict(filename=filename, fps=fps, **kwargs)
+        self.size = None
+        self.is_color = True
 
     def add(self, img):
-        """
-        新增一張幀畫面（img 可為 float 或 uint8）
-        """
         img = np.asarray(img)
         if img.dtype in [np.float32, np.float64]:
-            img = np.uint8(np.clip(img, 0, 1) * 255)
-        if len(img.shape) == 2:  # 灰階轉 RGB
-            img = np.repeat(img[..., None], 3, -1)
+            img = np.clip(img, 0, 1)
+            img = (img * 255).astype(np.uint8)
+        if len(img.shape) == 2:  # 灰階
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         if self.writer is None:
             h, w = img.shape[:2]
-            self.writer = FFMPEG_VideoWriter(size=(w, h), **self.params)
-        self.writer.write_frame(img)
+            self.size = (w, h)
+            self.writer = cv2.VideoWriter(
+                self.filename,
+                cv2.VideoWriter_fourcc(*'mp4v'),
+                self.fps,
+                self.size,
+                isColor=True
+            )
+        self.writer.write(img)
 
     def close(self):
-        """手動關閉影片寫入器"""
         if self.writer:
-            self.writer.close()
+            self.writer.release()
+            self.writer = None
 
     def __enter__(self):
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
