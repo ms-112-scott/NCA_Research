@@ -61,7 +61,8 @@ def plt_HWC_split_channels(
     # === 顯示每個通道分圖 ===
     for i in range(num_channels):
         channel_data = image[:, :, i]
-        cmap = channel_cmaps[i % len(channel_cmaps)]
+        # cmap = channel_cmaps[i % len(channel_cmaps)]
+        cmap = 'jet'  # 統一使用 jet colormap
 
         # 顯示單通道圖
         axes[0][i + 1].imshow(channel_data, cmap=cmap)

@@ -4,6 +4,11 @@ from core_utils.utils_image import imshow, tile2d
 from core_utils.utils_io import  imwrite
 from core_utils.ops_tf_np import to_rgb
 import os
+import matplotlib.pyplot as plt
+from typing import Union, Optional, Sequence
+from datetime import datetime
+
+
 
 def viz_pool(pool, step_i, output_path='train_log'):
     """
@@ -19,6 +24,7 @@ def viz_pool(pool, step_i, output_path='train_log'):
     tiled_pool[-72:, :] += (-tiled_pool[-72:, :] + ones[:, None, None]) * fade[::-1, None, None]
     imwrite(f'{output_path}/{step_i:04d}_pool.jpg', tiled_pool)
 
+
 def viz_batch(batch_list, step_i, output_path='train_log'):
     """
     將訓練批次前後狀態左右合併、上下堆疊後輸出並顯示
@@ -31,45 +37,88 @@ def viz_batch(batch_list, step_i, output_path='train_log'):
     print('batch (before/after):')
     imshow(vis)
 
-def moving_average(data, window=50):
-    """計算移動平均"""
-    return np.convolve(data, np.ones(window) / window, mode='valid')
 
-def viz_loss(loss_log, log_scale=True, window=50, save_path=None):
+#===============================================================
+# region moving_average
+def moving_average(arr: np.ndarray, window: int) -> np.ndarray:
     """
-    繪製 loss log 曲線，加入移動平均與變異區間。
+    計算移動平均 (Moving Average)
 
-    Args:
-        loss_log (list or np.ndarray): 原始 loss 值序列
-        log_scale (bool): 是否以 log10 顯示
-        window (int): 移動平均視窗大小
-        save_path (str or None): 若提供，將圖像儲存為檔案
+    參數
+    ----------
+    arr : np.ndarray
+        輸入的一維數列
+    window : int
+        平滑視窗大小
+
+    回傳
+    ----------
+    np.ndarray
+        經過移動平均處理後的數列
     """
-    loss_log = np.asarray(loss_log)
+    return np.convolve(arr, np.ones(window) / window, mode="valid")
+
+
+
+#===============================================================
+# region viz_loss
+def viz_loss(
+    train_loss_log: Union[Sequence[float], np.ndarray],
+    eval_loss_log: Optional[Union[Sequence[float], np.ndarray]] = None,
+    log_scale: bool = True,
+    window: int = 50,
+    save_path: Optional[str] = None
+) -> None:
+    train_loss = np.asarray(train_loss_log, dtype=np.float32)
     if log_scale:
-        loss_log = np.log10(loss_log + 1e-8)
+        train_loss = np.log10(train_loss + 1e-8)
 
-    x = np.arange(len(loss_log))
-    ma = moving_average(loss_log, window)
-    valid_x = x[window - 1:]
+    x_train = np.arange(len(train_loss))
 
-    std = np.array([
-        loss_log[i - window + 1:i + 1].std() for i in range(window - 1, len(loss_log))
-    ])
-
-    plt.figure(figsize=(10, 4))
+    plt.figure(figsize=(10, 5))
     plt.title("Loss history (log10)" if log_scale else "Loss history")
-    plt.plot(x, loss_log, '.', alpha=0.1, label='raw')
-    plt.plot(valid_x, ma, '-', color='blue', label='Moving Avg')
-    plt.fill_between(valid_x, ma - std, ma + std, color='blue', alpha=0.2, label='±1 std')
-    plt.xlabel("Step")
+
+    # 訓練 loss
+    plt.plot(x_train, train_loss, ".", alpha=0.1, label="Train (raw)", color="blue")
+
+    if len(train_loss) >= window:  # ✅ 只有長度足夠時才畫移動平均
+        ma_train = moving_average(train_loss, window)
+        valid_x_train = x_train[window - 1:]
+        std_train = np.array([
+            train_loss[i - window + 1:i + 1].std()
+            for i in range(window - 1, len(train_loss))
+        ])
+
+        plt.plot(valid_x_train, ma_train, "-", color="blue", label=f"Train MA (w={window})")
+        plt.fill_between(valid_x_train, ma_train - std_train, ma_train + std_train,
+                         color="blue", alpha=0.2, label="Train ±1 std")
+
+    # === 驗證 loss (同樣檢查長度) ===
+    if eval_loss_log is not None:
+        eval_loss = np.asarray(eval_loss_log, dtype=np.float32)
+        if log_scale:
+            eval_loss = np.log10(eval_loss + 1e-8)
+        x_eval = np.arange(len(eval_loss))
+        plt.plot(x_eval, eval_loss, ".", alpha=0.3, label="Eval (raw)", color="orange")
+
+        if len(eval_loss) >= window:
+            ma_eval = moving_average(eval_loss, window)
+            valid_x_eval = x_eval[window - 1:]
+            plt.plot(valid_x_eval, ma_eval, "-", color="orange", label=f"Eval MA (w={window})")
+
+    plt.xlabel("Epoch")
     plt.ylabel("Log Loss" if log_scale else "Loss")
     plt.legend()
     plt.tight_layout()
 
     if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path+"/loss.png", dpi=150)
-        print(f"[✔] Loss curve saved to: {save_path}")
+        os.makedirs(save_path, exist_ok=True)
+
+        # 以當前訓練 epoch 數命名檔案
+        epoch_num = len(train_loss_log)
+        fig_path = os.path.join(save_path, f"loss_epoch_{epoch_num}.png")
+
+        plt.savefig(fig_path, dpi=150)
+        print(f"[✔] Loss curve saved to: {fig_path}")
 
     plt.show()
