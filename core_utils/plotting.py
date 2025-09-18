@@ -33,9 +33,6 @@ def plt_HWC_split_channels(
     if isinstance(image, torch.Tensor):
         image = image.detach().cpu().numpy()
 
-    # flip vertically（上下翻轉）
-    # image = image[::-1, :, :]
-
     # 限制像素值範圍 [0, 1]
     # image = np.clip(image, 0.0, 1.0)
 
@@ -46,7 +43,17 @@ def plt_HWC_split_channels(
 
     # 準備通道名稱
     if channel_names is None:
-        names = [f"通道{i}" for i in range(num_channels)]
+        names = [
+            "geo_mask",
+            "topo",
+            "windInitX",
+            "windInitY",
+            "uped",
+            "vped",
+            "Uped",
+            "TKEped",
+            "Tuwped",
+        ]
     else:
         names = channel_names[:num_channels]
         if len(names) < num_channels:

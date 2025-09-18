@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Dict, Optional
 from scipy.ndimage import generic_filter
 import datetime
 from pathlib import Path
@@ -262,3 +262,115 @@ def channels_to_rgb(
         bhw3[i] = rgb
 
     return bhw3
+
+
+##---------------------------------------------------------------------------------------------------------------------------
+# region print_loss_dict
+def print_loss_dict(
+    train_loss_dict: Dict[str, torch.Tensor],
+    eval_loss_dict: Optional[Dict[str, torch.Tensor]] = None,
+) -> None:
+    """
+    列印訓練與驗證的 loss 值 (小數點後四位)
+
+    參數
+    ----
+    train_loss_dict : Dict[str, torch.Tensor]
+        訓練過程中的 loss 字典 (key: loss 名稱, value: loss tensor)
+    eval_loss_dict : Optional[Dict[str, torch.Tensor]], default=None
+        驗證過程中的 loss 字典 (若為 None 則不輸出)
+
+    回傳
+    ----
+    None
+    """
+    print("Train Losses:")
+    for name, value in train_loss_dict.items():
+        if value is not None:  # 避免 None 值
+            print(f"{name}: {value.item():.4f}", end=" | ")
+
+    if eval_loss_dict:
+        print("\nEval Losses:")
+        for name, value in eval_loss_dict.items():
+            if value is not None:  # 避免 None 值
+                print(f"{name}: {value.item():.4f}", end=" | ")
+    print()  # 換行
+
+
+##---------------------------------------------------------------------------------------------------------------------------
+# region sort_pool_by_mse
+def sort_pool_by_mse(
+    X_pool: torch.Tensor,  # shape = (N, C, H, W)
+    Y_pool: torch.Tensor,  # shape = (N, C, H, W)
+    channel_start: int = 4,
+    channel_end: int = 9,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    直接依 X_pool 與 Y_pool 的 MSE 排序 (小到大)
+
+    參數
+    ----------
+    X_pool : torch.Tensor
+        輸入池, shape = (N, C, H, W)
+    Y_pool : torch.Tensor
+        目標池, shape = (N, C, H, W)
+    channel_start : int
+        計算 MSE 的起始 channel
+    channel_end : int
+        計算 MSE 的結束 channel (不包含)
+
+    回傳
+    ----------
+    X_sorted, Y_sorted : torch.Tensor
+        依 MSE 排序後的池
+    """
+    # 選取指定 channel
+
+    X_sel = X_pool[:, channel_start:channel_end, :, :]
+    Y_sel = Y_pool[:, channel_start:channel_end, :, :]
+
+    # 計算每個 sample 的 MSE (展平後對每個 sample mean)
+    N = X_sel.shape[0]
+    mse_per_sample = ((X_sel - Y_sel) ** 2).view(N, -1).mean(dim=1)
+
+    # 依 MSE 排序
+    sorted_idx = torch.argsort(mse_per_sample)  # 小到大
+
+    X_sorted = X_pool[sorted_idx]
+    Y_sorted = Y_pool[sorted_idx]
+
+    return X_sorted, Y_sorted
+
+
+##---------------------------------------------------------------------------------------------------------------------------
+# region log_globals
+# help.py
+def log_globals(
+    scope: dict,
+    log_dir: str = "train_log",
+    log_file: str = "globals_log.txt",
+    exclude_vars: list[str] = None,
+) -> None:
+    import os
+
+    if exclude_vars is None:
+        exclude_vars = ["TRAIN_CASES", "EVAL_CASES", "TEST_CASES", "F", "HTML"]
+
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, log_file)
+
+    uppercase_vars = [
+        name
+        for name in scope
+        if name.isupper() and name not in exclude_vars and not name.startswith("_")
+    ]
+
+    with open(log_path, "w", encoding="utf-8") as f:
+        for name in uppercase_vars:
+            value = scope[name]
+            if hasattr(value, "shape"):
+                f.write(f"{name}: shape = {value.shape}\n")
+            else:
+                f.write(f"{name} = {value}\n")
+
+    print(f"全域變數已寫入 {log_path}")

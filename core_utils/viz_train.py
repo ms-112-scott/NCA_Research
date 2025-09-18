@@ -1,13 +1,15 @@
 import os
 from datetime import datetime
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Sequence, Union, Dict
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 from core_utils.utils_image import imshow, tile2d
 from core_utils.utils_io import imwrite
+from E4_PI_NCA.utils.helper import channels_to_rgb, to_HWC
 
 
 # ===============================================================
@@ -17,25 +19,14 @@ def viz_pool(pool: torch.Tensor, step_i: int, output_path: str = "train_log") ->
     將 pool (BHWC tensor) 中前 49 張圖像拼貼，並加上四邊漸變淡出效果，
     最後輸出圖片存檔 (train_log/%04d_pool.jpg)。
     """
+    count = int(np.floor(np.sqrt(pool.shape[0])))
+    count = np.min([count, 7])
+    subpool = torch.cat([pool[: np.square(count) - count], pool[-count:]])
+    tiled_pool: np.ndarray = tile2d(subpool, n=count)  # (H, W, 3)
 
-    # 轉換為 numpy
-
-    tiled_pool: np.ndarray = tile2d(pool[:49])  # (H, W, 3)
-    H, W, C = tiled_pool.shape
-
-    fade = np.linspace(1.0, 0.0, 72)
-
-    # 左邊淡出
-    tiled_pool[:, :72, :] *= fade[None, :, None]
-    # 右邊淡出
-    tiled_pool[:, -72:, :] *= fade[None, ::-1, None]
-    # 上方淡出
-    tiled_pool[:72, :, :] *= fade[:, None, None]
-    # 下方淡出
-    tiled_pool[-72:, :, :] *= fade[::-1, None, None]
-
-    imwrite(f"{output_path}/{step_i:04d}_pool.jpg", (tiled_pool * 255).astype(np.uint8))
+    # imwrite(f"{output_path}/{step_i:04d}_pool.jpg", (tiled_pool * 255).astype(np.uint8))
     imshow(tiled_pool)
+    plt.imshow(tiled_pool, cmap="jet")
 
 
 # ===============================================================
@@ -149,6 +140,68 @@ def viz_loss(
         fig_path = os.path.join(save_path, f"loss_epoch_{epoch_num}.png")
 
         plt.savefig(fig_path, dpi=150)
-        print(f"[✔] Loss curve saved to: {fig_path}")
 
+        np.savez(
+            os.path.join(save_path, f"losses_{epoch_num}.npz"),
+            train_loss=train_loss,
+            eval_loss=eval_loss,
+        )
+
+    plt.show()
+
+
+# ===============================================================
+# region viz_epochs
+def viz_epochs(batch_dict: Dict[str, torch.Tensor], max_channels: int = 9) -> None:
+    """
+    從 batch_dict 隨機挑選一個樣本，將前 max_channels 個通道可視化並拼接成圖。
+
+    參數
+    ----
+    batch_dict : Dict[str, torch.Tensor]
+        儲存多個 batch tensor 的字典，假設每個 tensor 的 shape 為 (B, C, H, W)
+        - B: batch size
+        - C: channel 數
+        - H, W: 高與寬
+    max_channels : int, default=9
+        最多要視覺化的通道數量
+
+    回傳
+    ----
+    None
+        直接呼叫 plot_HW3 繪製圖像
+    """
+    # 從第一個 batch tensor 取得 batch size
+    max_batch = next(iter(batch_dict.values())).shape[0]
+
+    # 隨機挑選一個 sample index
+    random_idx = np.random.randint(0, max_batch)
+
+    out = []
+
+    # 遍歷所有 batch_tensor
+    for batch_tensor in batch_dict.values():
+        # 取出一個樣本並轉換為 HWC，僅保留前 max_channels
+        hwc = to_HWC(batch_tensor[random_idx])[..., :max_channels]
+
+        # 將多通道轉換成 RGB（假設 channels_to_rgb 有這功能）
+        chw3 = channels_to_rgb(hwc)
+        chw3 = torch.from_numpy(chw3)
+
+        # F.pad 的 pad 格式為 (W_left, W_right, H_top, H_bottom, C_front, C_back)
+        chw3 = F.pad(chw3, (0, 0, 5, 0, 5, 0), value=1.0)
+
+        # 拆成 max_channels 張圖，水平拼接
+        chw3 = [chw3[i] for i in range(max_channels)]
+        out.append(torch.hstack(chw3))
+
+    # 倒序排列後再垂直拼接
+    out.reverse()
+    out = torch.vstack(out)
+
+    # 繪製最終圖像
+    out = out.detach().cpu().numpy()
+    fig, ax = plt.subplots()
+    ax.imshow(out, aspect="equal", origin="lower")
+    ax.axis("off")
     plt.show()
