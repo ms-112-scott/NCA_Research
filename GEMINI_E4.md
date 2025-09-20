@@ -1,68 +1,70 @@
-# GEMINI_E4.md
+# GEMINI_E4.md (重構版)
 
-## Project Overview
+## 專案總覽
 
-This project, located in the `E4_PI_NCA` directory, focuses on the development and training of a Physics-Informed Neural Cellular Automata (PI-NCA) for simulating fluid dynamics. The project utilizes PyTorch to build and train the NCA model. The experiments are conducted in both Python scripts and Jupyter Notebooks, allowing for both systematic training and interactive exploration.
+本專案 (E4) 的核心目標是**開發一種用於流體動力學模擬的物理資訊神經細胞自動機 (Physics-Informed Neural Cellular Automata, PI-NCA)**。靈感啟發自可成長神經細胞自動機 (Growing NCA)，我們試圖將物理定律（以偏微分方程的形式）作為一種歸納偏置 (inductive bias) 嵌入到 NCA 的學習規則中，期望模型不僅能學習「如何演化」，更能理解「為何如此演化」。
 
-## Key Components
+專案採用 PyTorch 作為主要開發框架，並以 OpenFOAM 模擬的流場資料作為初始的真值 (Ground Truth)。
 
-### 1. `CFD_PI-NCA.py`
+---
 
-This is the main script for the E4 experiment. It orchestrates the entire workflow, including data loading, model definition, training, and evaluation.
+## 研究脈絡與檔案結構
 
-- **Data Loading and Preprocessing:** The script loads CFD data from a `.npz` file, splits it into training, evaluation, and test sets, and creates an epoch pool for training.
-- **Model Architecture:** The `CAModel` is a PyTorch `nn.Module` that consists of a perception block and a rule block. The perception block uses a set of fixed convolutional kernels (identity, Sobel, Laplacian) to perceive the local neighborhood of each cell. The rule block is a small convolutional neural network that takes the output of the perception block and computes the update for each cell.
-- **Training and Evaluation:** The script defines functions for training and evaluating the model for one epoch. The `run_training` function coordinates the entire training process, including the training loop, learning rate scheduling, and early stopping.
-- **Loss Function:** The custom loss function is a combination of several losses:
-  - `data_mse_loss`: The mean squared error between the predicted and target data.
-  - `obstacle_loss`: A loss that penalizes non-zero values inside obstacles.
-  - `fft_loss`: A loss that compares the Fourier transforms of the predicted and target data.
-  - `Uvel_loss`: A loss that enforces a physical constraint on the velocity field.
-- **Metric Function:** The script defines a metric function to evaluate the accuracy of the model.
-- **Main Process:** The main part of the script initializes the model, optimizer, and learning rate scheduler, and then calls the `run_training` function to start the training.
-- **Testing:** After training, the script loads the trained model and tests it on the test set.
+為了清晰地反映研究的演進過程，`E4_PI_NCA/notebooks` 目錄下的檔案已按照以下邏輯重新編號與命名。整個研究路徑分為主要路徑、備用路徑與平行研究三部分。
 
-### 2. `notebooks`
+### 1. 核心研究路徑 (CFD-PI-NCA)
+這是專案的主線，目標是實現最終的 PI-NCA 模型。
 
-This directory contains several Jupyter Notebooks for different purposes:
+- **第一階段：資料處理 (`E4-1.x`)**
+    - **簡述**: 處理作為真值的 OpenFOAM 模擬資料。
+    - **重點**: 
+        - `E4-1.0_Data_Visualization.ipynb`: 視覺化檢查，確保資料品質。
+        - `E4-1.1_Data_Preprocessing.ipynb`: 將資料轉換為模型可用的格式。
 
-- `E4-0_PI-NCA.ipynb`: This notebook is the TensorFlow/Keras version of the `CFD_PI-NCA.py` script. It provides a more interactive way to run the experiment and visualize the results.
-- `E4-0_PINN_test.ipynb`: This notebook delves deeper into the concept of Physics-Informed Neural Networks (PINNs). It calculates the pressure gradient force, viscous force, and convective force, and then computes the residual. The goal of this notebook seems to be to train an NCA model that minimizes this residual, thereby learning the physical laws of fluid dynamics.
-- Other notebooks in this directory are related to data preprocessing, visualization, and other experiments (e.g., Lattice-Boltzmann methods).
+- **第二階段：基準模型建立 (`E4-2.x`)**
+    - **簡述**: 將 GNCA 思想應用於 CFD 資料，建立一個純資料驅動的 NCA 模型作為效能基準。
+    - **重點**:
+        - `E4-2.0_CFD_GrowthNCA.ipynb`: 實現並訓練一個僅基於 MSE 損失的 CFD-NCA。
 
-### 3. `utils`
+- **第三階段：物理資訊整合 (`E4-3.x`)**
+    - **簡述**: **本專案的核心貢獻**。將 PINN 的思想整合進 NCA，使模型學習物理定律。
+    - **重點**:
+        - `E4-3.0_PINN_Concept_Test.ipynb`: 獨立驗證使用物理殘差作為損失函數的可行性。
+        - `E4-3.1_CFD_PhysicsInformed_NCA.ipynb`: **最終模型**，將資料損失與物理損失結合，進行端到端訓練。
 
-This directory contains utility functions used in the project:
+### 2. 備用資料集路徑
+在研究過程中，由於發現原始 CFD 資料存在一些潛在問題，我們轉向公開的 UrbanTales 資料集來驗證模型的穩健性。
 
-- `helper.py`: This file contains a collection of helper functions for various tasks, such as tensor manipulation, plotting, data splitting, and logging.
-- `SamplePool.py`: This file defines a `SamplePool` class for managing and sampling data pools.
+- **第四階段：UrbanTales 資料集實驗 (`E4-4.x`)**
+    - **簡述**: 在一個新的、更標準化的資料集上重複 NCA 實驗。
+    - **重點**:
+        - `E4-4.0_..._UrbanTales.ipynb`: 資料預處理。
+        - `E4-4.1_..._UrbanTales_GrowthNCA.ipynb`: 在 UrbanTales 上訓練 NCA 模型。
 
-## Building and Running
+### 3. 平行對照研究
+為了從非機器學習的視角進行比較，我們獨立進行了 LBM 的研究。
 
-To run this project, you will need a Python environment with the following dependencies installed:
+- **第五階段：格子波茲曼方法 (`E4-5.x`)**
+    - **簡述**: 使用傳統的計算流體力學方法 LBM 進行模擬。
+    - **重點**:
+        - `E4-5.0_LBM_Simulation.ipynb`: 實現一個基礎的 LBM 模擬器，其結果可作為 NCA 模型的對照組，或用於未來生成更高品質的訓練資料。
 
+---
+
+## 如何建置與執行
+
+要運行本專案，您需要一個已安裝以下函式庫的 Python 環境:
 - PyTorch
 - NumPy
 - Matplotlib
 - tqdm
 - ipynbname
 
-### Running the Main Script
+### 執行核心實驗
 
-To run the main experiment, you can execute the `CFD_PI-NCA.py` script:
+本專案最核心的實驗是物理資訊 NCA 的實現，您可以直接運行相關的 Jupyter Notebook：
 
-```bash
-python E4_PI_NCA/CFD_PI-NCA.py
-```
-
-### Running the Notebooks
-
-To explore the experiments and visualizations interactively, you can run the Jupyter Notebooks in the `E4_PI_NCA/notebooks` directory. Make sure you have Jupyter Notebook or JupyterLab installed.
-
-把 E4*PI_NCA 資料夾中所有.ipynb 的 notebook 依照開發的實驗過程順序重新命名為，並且取名為簡易可以讀懂有意義的敘述，檔案用英文重新命名。E4-{number}*{description}
-
-1.先讀取 GEMINI_E4.md 理解所有 E4_PI_NCA 在做甚麼。
-2.E4_PI_NCA 資料夾中所有.ipynb 的 notebooks 中，第一最開頭地方新增一個 md cell 記錄這的筆記本相較上一個 或是 主要的改進部分。
-
-- 用繁體中文描述紀錄，簡要條列式
-- 不要修改到檔案既有的其他 cell 程式碼
+1.  開啟 Jupyter Notebook 或 JupyterLab。
+2.  導航至 `E4_PI_NCA/notebooks/` 目錄。
+3.  打開 `E4-3.1_CFD_PhysicsInformed_NCA.ipynb`。
+4.  依照筆記本中的儲存格順序執行，即可開始模型的訓練與評估。
