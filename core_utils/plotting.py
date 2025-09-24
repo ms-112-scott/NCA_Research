@@ -27,14 +27,12 @@ def plt_HWC_split_channels(
     """
     顯示多通道影像的每個通道分圖，並可選擇是否繪製直方圖。
     並在每個 channel subplot 旁邊加上 scale label (colorbar)。
+    若 channel 數值全部相同，則在影像中央顯示該數字。
     """
 
     # 將 tensor 轉為 numpy
     if isinstance(image, torch.Tensor):
         image = image.detach().cpu().numpy()
-
-    # 限制像素值範圍 [0, 1]
-    # image = np.clip(image, 0.0, 1.0)
 
     # 確定要顯示的通道數量
     num_channels = (
@@ -69,7 +67,7 @@ def plt_HWC_split_channels(
         axes = np.expand_dims(axes, axis=0)
 
     # === 顯示原始影像（只取前3通道當作RGB） ===
-    axes[0][0].imshow(image[:, :, :3])  # 避免 index error，取前3通道
+    axes[0][0].imshow(image[:, :, 4:7])  # 避免 index error，取前3通道
     axes[0][0].set_title("原始影像")
     axes[0][0].axis("off")
 
@@ -78,9 +76,24 @@ def plt_HWC_split_channels(
         channel_data = image[:, :, i]
         max_val = np.max(channel_data)
         min_val = np.min(channel_data)
+
         im = axes[0][i + 1].imshow(channel_data, cmap="jet", vmin=min_val, vmax=max_val)
         axes[0][i + 1].set_title(names[i])
         axes[0][i + 1].axis("off")
+
+        # 如果數值全相同 → 顯示數字
+        if np.all(channel_data == channel_data.flat[0]):
+            axes[0][i + 1].text(
+                channel_data.shape[1] // 2,
+                channel_data.shape[0] // 2,
+                f"{channel_data.flat[0]:.3f}",
+                color="white",
+                ha="center",
+                va="center",
+                fontsize=10,
+                weight="bold",
+                bbox=dict(facecolor="black", alpha=0.6, boxstyle="round,pad=0.2"),
+            )
 
         # 在每個 channel subplot 加 colorbar
         plt.colorbar(im, ax=axes[0][i + 1], fraction=0.046, pad=0.04)

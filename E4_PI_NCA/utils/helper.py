@@ -53,9 +53,11 @@ def to_HWC(arr: Union[np.ndarray, torch.Tensor]) -> Union[np.ndarray, torch.Tens
 
 # ===========================================================================================
 # region print_tensor_stats
-def print_tensor_stats(x: torch.Tensor, name: str = "Tensor") -> None:
+def print_tensor_stats(
+    x: torch.Tensor, name: str = "Tensor", max_C: int = None, as_plot: bool = False
+) -> None:
     """
-    列印 3D 或 4D tensor 每個 channel的 min/max
+    輸出 tensor channel-wise 統計資訊，支援表格或 boxplot。
 
     Parameters
     ----------
@@ -63,23 +65,46 @@ def print_tensor_stats(x: torch.Tensor, name: str = "Tensor") -> None:
         shape = (C,H,W) 或 (B,C,H,W)
     name : str
         tensor 名稱
+    max_C : int, optional
+        最多顯示多少個 channel
+    as_plot : bool, default=False
+        True → 畫 boxplot
+        False → 印出表格 (min/max/mean/q1/q3)
     """
-    if x.ndim == 3:
+    if x.ndim == 3:  # (C,H,W)
         C = x.shape[0]
-        print(f"{name} (C,H,W) shape = {x.shape}")
-        for c in range(C):
-            print(
-                f"  channel {c}: min={x[c].min().item():.6f}, max={x[c].max().item():.6f}"
-            )
-    elif x.ndim == 4:
+        data = [x[c].flatten().cpu().numpy() for c in range(C)]
+    elif x.ndim == 4:  # (B,C,H,W)
         B, C, H, W = x.shape
-        print(f"{name} (B,C,H,W) shape = {x.shape}")
-        for c in range(C):
-            ch_min = x[:, c, :, :].min().item()
-            ch_max = x[:, c, :, :].max().item()
-            print(f"  channel {c}: min={ch_min:.6f}, max={ch_max:.6f}")
+        data = [x[:, c, :, :].flatten().cpu().numpy() for c in range(C)]
     else:
         raise ValueError(f"{name} 不支援 ndim={x.ndim}, 只支援 3D 或 4D tensor")
+
+    if max_C is not None:
+        data = data[:max_C]
+
+    if as_plot:
+        # --- 繪製 boxplot ---
+        plt.figure(figsize=(min(len(data), 6), 3))
+        plt.boxplot(data, labels=[f"ch{c}" for c in range(len(data))], showfliers=False)
+        plt.title(f"{name} Channel-wise Distribution")
+        plt.ylabel("Value")
+        plt.xlabel("Channel")
+        plt.grid(axis="y", linestyle="--", alpha=0.6)
+        plt.tight_layout()
+        plt.show()
+    else:
+        # --- 輸出統計表 ---
+        print(f"{name} Channel-wise stats (max {len(data)} ch):")
+        header = f"{'ch':<5} {'min':>10} {'q1':>10} {'mean':>10} {'q3':>10} {'max':>10}"
+        print(header)
+        print("-" * len(header))
+        for i, arr in enumerate(data):
+            q1 = np.percentile(arr, 25)
+            q3 = np.percentile(arr, 75)
+            print(
+                f"{i:<5} {arr.min():>10.6f} {q1:>10.6f} {arr.mean():>10.6f} {q3:>10.6f} {arr.max():>10.6f}"
+            )
 
 
 # ===========================================================================================
@@ -344,7 +369,6 @@ def sort_pool_by_mse(
 
 ##---------------------------------------------------------------------------------------------------------------------------
 # region log_globals
-# help.py
 def log_globals(
     scope: dict,
     log_dir: str = "train_log",
@@ -374,3 +398,51 @@ def log_globals(
                 f.write(f"{name} = {value}\n")
 
     print(f"全域變數已寫入 {log_path}")
+
+
+##---------------------------------------------------------------------------------------------------------------------------
+# region check_tensor_nan_inf
+import torch
+
+
+def check_tensor_nan_inf(obj, name="tensor"):
+    """
+    檢查 tensor 或巢狀結構中是否含有 NaN / Inf，並分開警告
+
+    Parameters
+    ----------
+    obj : torch.Tensor, list, dict
+        要檢查的對象，可以是 tensor 或巢狀結構
+    name : str
+        名稱，用於打印提示
+
+    Returns
+    -------
+    has_invalid : bool
+        True 表示有 NaN 或 Inf
+    """
+    has_invalid = False
+
+    if isinstance(obj, torch.Tensor):
+        if torch.isnan(obj).any():
+            print(f"[Warning] {name} contains NaN")
+            has_invalid = True
+        if torch.isinf(obj).any():
+            print(f"[Warning] {name} contains Inf")
+            has_invalid = True
+
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            if check_tensor_nan_inf(v, f"{name}.{k}"):
+                has_invalid = True
+
+    elif isinstance(obj, (list, tuple)):
+        for i, v in enumerate(obj):
+            if check_tensor_nan_inf(v, f"{name}[{i}]"):
+                has_invalid = True
+
+    else:
+        # 非 tensor 的物件忽略
+        pass
+
+    return has_invalid
