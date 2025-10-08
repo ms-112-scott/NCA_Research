@@ -5,7 +5,6 @@ plt.rcParams["axes.unicode_minus"] = False  # 避免負號顯示錯誤
 
 import torch
 from typing import Optional, List, Union
-import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Optional, Union, List
@@ -42,6 +41,8 @@ def plt_HWC_split_channels(
     # 準備通道名稱
     if channel_names is None:
         names = [
+            "coord_y",
+            "coord_x",
             "geo_mask",
             "topo",
             "windInitX",
@@ -67,7 +68,7 @@ def plt_HWC_split_channels(
         axes = np.expand_dims(axes, axis=0)
 
     # === 顯示原始影像（只取前3通道當作RGB） ===
-    axes[0][0].imshow(image[:, :, 4:7])  # 避免 index error，取前3通道
+    axes[0][0].imshow(image[:, :, 6:9])  # 避免 index error，取前3通道
     axes[0][0].set_title("原始影像")
     axes[0][0].axis("off")
 
@@ -110,6 +111,30 @@ def plt_HWC_split_channels(
         axes[1][0].axis("off")
 
     plt.tight_layout()
+    plt.show()
+
+
+##---------------------------------------------------------------------------------------------------------------------------
+##---------------------------------------------------------------------------------------------------------------------------
+# region plot_HW3
+def plot_HW3(t: torch.Tensor, title: str = None):
+    """
+    繪製 shape = (H, W, 3) 的 tensor 圖像
+    - t: torch.Tensor, shape (H, W, 3)，值域建議 [0,1] 或 [0,255]
+    """
+    if t.ndim != 3 or t.shape[-1] != 3:
+        raise ValueError(f"輸入必須是 (H, W, 3)，目前是 {t.shape}")
+
+    img = t.detach().cpu().numpy()
+
+    # 如果數值大於1，假設是 0~255 範圍，轉成 0~1
+    if img.max() > 1.0:
+        img = img / 255.0
+
+    plt.imshow(img)
+    if title is not None:
+        plt.title(title)
+    plt.axis("off")
     plt.show()
 
 
