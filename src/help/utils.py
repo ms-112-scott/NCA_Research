@@ -4,6 +4,7 @@ import numpy as np
 import random
 import torchvision.transforms.functional as TF
 from PIL import Image
+import wandb
 
 
 def set_seed(seed: int):
@@ -51,3 +52,39 @@ def to_nchw(img: Union[torch.Tensor, list]) -> torch.Tensor:
 
 def to_rgb(x):
     return x[..., :3, :, :] + 0.5
+
+
+def get_next_run_name(project_name: str, base_name: str) -> str:
+    """
+    查詢 WandB API，自動生成帶有流水號的 Run Name。
+    格式: {base_name}_V{n}
+    """
+    try:
+        api = wandb.Api()
+        # 取得預設 entity (你的使用者名稱)
+        entity = api.default_entity
+
+        # 嘗試取得專案中的 runs
+        runs = api.runs(f"{entity}/{project_name}")
+
+        max_version = 0
+        prefix = f"{base_name}_V"
+
+        for run in runs:
+            # 檢查 run name 是否符合格式
+            if run.name.startswith(prefix):
+                try:
+                    # 取出 _V 後面的數字
+                    version_part = run.name.split("_V")[-1]
+                    version = int(version_part)
+                    if version > max_version:
+                        max_version = version
+                except ValueError:
+                    continue
+
+        next_version = max_version + 1
+        return f"{base_name}_V{next_version}"
+
+    except Exception as e:
+        print(f"Warning: Could not fetch runs from WandB ({e}). Defaulting to V1.")
+        return f"{base_name}_V1"

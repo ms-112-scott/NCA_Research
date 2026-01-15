@@ -5,6 +5,7 @@ __pycache__/
 .git/
 saved_model/
 Taichi_leraning/
+wandb/
 
 *.pyc
 *.npz
