@@ -88,3 +88,19 @@ def get_next_run_name(project_name: str, base_name: str) -> str:
     except Exception as e:
         print(f"Warning: Could not fetch runs from WandB ({e}). Defaulting to V1.")
         return f"{base_name}_V1"
+
+
+def log_batch_image(
+    batch_x: torch.Tensor, step: int, caption_prefix: str = "Train"
+) -> wandb.Image:
+    """
+    輔助函式：將 Batch 中的第一張 Tensor 轉為 Wandb Image 物件。
+    """
+    # 取 batch 中的第一張圖 [C, H, W]
+    img_tensor = batch_x[0].detach().cpu()
+
+    # 轉換維度 [C, H, W] -> [H, W, C] 並截斷數值
+    img_rgb = img_tensor[:3].permute(1, 2, 0).numpy()
+    img_rgb = np.clip(img_rgb, 0.0, 1.0)
+
+    return wandb.Image(img_rgb, caption=f"{caption_prefix} Step {step}")

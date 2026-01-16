@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
 from typing import List, Optional, Union, Tuple
-from src.help.utils import to_nchw
+from src.utils.utils import to_nchw
 
 __all__ = ["VGGLoss", "ot_loss", "create_vgg_loss"]
 
