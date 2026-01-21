@@ -1,0 +1,8 @@
+torch
+wandb
+numpy
+tqdm
+opencv-python
+ipython
+pathspec
+pytest

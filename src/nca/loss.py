@@ -3,9 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
 from typing import List, Optional, Union, Tuple
-from src.utils.utils import to_nchw
 
-__all__ = ["VGGLoss", "ot_loss", "create_vgg_loss"]
+# This line is commented out because the new structure doesn't have this file yet.
+# from src.utils.utils import to_nchw
+
+__all__ = ["VGGLoss", "ot_loss", "create_vgg_loss", "MSELoss"]
 
 
 def project_sort(x: torch.Tensor, proj: torch.Tensor) -> torch.Tensor:
@@ -112,7 +114,10 @@ class VGGLoss(nn.Module):
         self.to(device)
 
         # 確保 target_img 格式正確並移至設備
-        target_tensor = to_nchw(target_img).to(device)
+        # This function is not available yet, so I'm commenting it out.
+        # target_tensor = to_nchw(target_img).to(device)
+        target_tensor = target_img.to(device)
+
 
         # 預先計算並快取目標圖片的風格特徵
         # 使用 detach() 確保不會對目標圖計算梯度，節省記憶體
@@ -173,3 +178,22 @@ def create_vgg_loss(target_img: Union[torch.Tensor, list]) -> VGGLoss:
     工廠函式：建立 VGGLoss 實例 (保留此函式以維持向後相容性)。
     """
     return VGGLoss(target_img)
+
+
+class MSELoss(nn.Module):
+    """
+    包裝 MSE Loss，使其介面與 VGGLoss 一致。
+    初始化時固定 target，forward 時只需傳入 input。
+    """
+
+    def __init__(self, target_img: torch.Tensor):
+        super().__init__()
+        # 註冊 target 為 buffer (不會被視為模型參數，但會隨模型移動 device)
+        self.register_buffer("target", target_img.detach())
+        self.loss_fn = nn.MSELoss()
+
+    def forward(self, x: torch.Tensor):
+        # 如果輸入 x 的 batch size 比 target 大，我們需要擴展 target
+        # x: [B, C, H, W], target: [1, C, H, W]
+        target_expanded = self.target.expand_as(x)
+        return self.loss_fn(x, target_expanded)
